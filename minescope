@@ -1,0 +1,55 @@
+from flask import Flask, render_template, request, jsonify
+import requests
+import json
+import time
+
+app = Flask(__name__)
+
+# Minecraft API endpoint for server status
+MC_API_URL = "https://api.mcsrvstat.us/2/"
+
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+@app.route('/api/server-status', methods=['POST'])
+def get_server_status():
+    data = request.get_json()
+    server_address = data.get('server')
+
+    if not server_address:
+        return jsonify({'error': 'No server address provided'}), 400
+
+    try:
+        # Fetch server data from the API
+        response = requests.get(f"{MC_API_URL}{server_address}")
+        server_data = response.json()
+
+        if not server_data.get('online', False):
+            return jsonify({
+                'error': 'Server is offline or does not exist'
+            }), 404
+
+        # Process the API response
+        result = {
+            'name': server_data.get('hostname', server_address),
+            'online': server_data.get('online', False),
+            'players': {
+                'online': server_data.get('players', {}).get('online', 0),
+                'max': server_data.get('players', {}).get('max', 0),
+                'list': server_data.get('players', {}).get('list', [])
+            },
+            'version': server_data.get('version', 'Unknown')
+        }
+
+        # Add additional info if available
+        if 'motd' in server_data:
+            result['motd'] = server_data['motd'].get('clean', ['No message'])
+
+        return jsonify(result)
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+if __name__ == '__main__':
+    app.run(debug=True)
